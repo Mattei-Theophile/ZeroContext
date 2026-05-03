@@ -1,6 +1,9 @@
+from __future__ import annotations
+import io
 import uuid
 from pathlib import Path
-
+from typing import Any
+from zipfile import ZIP_DEFLATED, ZipFile
 import flet as ft
 
 from database.mongodb_service import MongoDiscussionService
@@ -15,13 +18,13 @@ def section_title(title: str):
                 title,
                 size=21,
                 weight=ft.FontWeight.BOLD,
-                color=ft.colors.BLACK87,
+                color=ft.Colors.BLACK_87,
             ),
             ft.Container(
                 width=165,
                 height=2,
-                bgcolor=ft.colors.BLUE_400,
-                margin=ft.margin.only(top=-4),
+                bgcolor=ft.Colors.BLUE_400,
+                margin=ft.Margin.only(top=-4),
             ),
         ],
         spacing=0,
@@ -32,16 +35,16 @@ def result_box(title: str, text_control: ft.Text, height: int):
     return ft.Container(
         height=height,
         width=305,
-        bgcolor=ft.colors.GREY_50,
+        bgcolor=ft.Colors.GREY_50,
         border_radius=4,
-        padding=ft.padding.only(top=18, left=12, right=12),
+        padding=ft.Padding.only(top=18, left=12, right=12),
         content=ft.Column(
             controls=[
                 ft.Text(
                     title,
                     size=13,
                     weight=ft.FontWeight.BOLD,
-                    color=ft.colors.GREY_700,
+                    color=ft.Colors.GREY_700,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 text_control,
@@ -63,12 +66,12 @@ def build_text_anonymization_card(
 
     prompt_input = ft.TextField(
         hint_text="Enter prompt to anonymize...",
-        border_color=ft.colors.GREY_300,
-        focused_border_color=ft.colors.BLUE_400,
+        border_color=ft.Colors.GREY_300,
+        focused_border_color=ft.Colors.BLUE_400,
         height=42,
         text_size=14,
         expand=True,
-        content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        content_padding=ft.Padding.symmetric(horizontal=12, vertical=8),
     )
 
     def anonymize_text(e):
@@ -100,13 +103,13 @@ def build_text_anonymization_card(
     return ft.Container(
         width=350,
         height=200,
-        padding=ft.padding.all(22),
-        bgcolor=ft.colors.WHITE,
+        padding=ft.Padding.all(22),
+        bgcolor=ft.Colors.WHITE,
         border_radius=8,
         shadow=ft.BoxShadow(
             spread_radius=1,
             blur_radius=14,
-            color=ft.colors.with_opacity(0.09, ft.colors.BLACK),
+            color=ft.Colors.BLACK.with_opacity(color=ft.Colors.BLACK, opacity=0.09),
             offset=ft.Offset(0, 3),
         ),
         content=ft.Column(
@@ -116,9 +119,9 @@ def build_text_anonymization_card(
                     controls=[
                         prompt_input,
                         ft.IconButton(
-                            icon=ft.icons.SEND_OUTLINED,
-                            icon_color=ft.colors.WHITE,
-                            bgcolor=ft.colors.BLUE_500,
+                            icon=ft.Icons.SEND_OUTLINED,
+                            icon_color=ft.Colors.WHITE,
+                            bgcolor=ft.Colors.BLUE_500,
                             width=42,
                             height=42,
                             tooltip="Anonymize text",
@@ -150,15 +153,22 @@ def build_file_anonymization_card(
     selected_files_text = ft.Text(
         "No files selected",
         size=12,
-        color=ft.colors.GREY_600,
+        color=ft.Colors.GREY_600,
         text_align=ft.TextAlign.CENTER,
         overflow=ft.TextOverflow.ELLIPSIS,
         max_lines=4,
     )
 
-    download_all_button = ft.ElevatedButton(
-        text="Download all anonymized files",
-        icon=ft.icons.DOWNLOAD_OUTLINED,
+    download_all_button = ft.Button(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.DOWNLOAD_OUTLINED),
+                ft.Text("Download all anonymized files"),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=8,
+            tight=True,
+        ),
         disabled=True,
     )
 
@@ -175,76 +185,116 @@ def build_file_anonymization_card(
 
         return zip_buffer.getvalue()
 
-    def on_download_location_selected(e: ft.FilePickerResultEvent):
-        if not e.path:
+    def save_anonymized_zip_to_path(path: str):
+        if not path:
             set_result("Download was cancelled.")
+            page.update()
             return
 
         try:
             zip_bytes = create_anonymized_files_zip()
 
-            with open(e.path, "wb") as output_file:
+            with open(path, "wb") as output_file:
                 output_file.write(zip_bytes)
 
-            set_result(f"Downloaded {len(anonymized_files)} anonymized files to:\n{e.path}")
+            set_result(f"Downloaded {len(anonymized_files)} anonymized file(s) to:\n{path}")
+            page.update()
 
         except Exception as exc:
+            print(f"Could not download anonymized files: {exc}", flush=True)
             set_result(f"Could not download anonymized files: {exc}")
+            page.update()
+
+    def on_download_location_selected(e: Any):
+        print(f"Download picker result received: {e}", flush=True)
+
+        selected_path = e if isinstance(e, str) else getattr(e, "path", None)
+        save_anonymized_zip_to_path(selected_path)
 
     download_picker = ft.FilePicker()
     download_picker.on_result = on_download_location_selected
 
-    if download_picker not in page.overlay:
-        page.overlay.append(download_picker)
+    if download_picker not in page.services:
+        page.services.append(download_picker)
+        page.update()
 
     async def download_all_files(e):
         if not anonymized_files:
             set_result("No anonymized files are available to download yet.")
+            page.update()
             return
 
         try:
-            if download_picker not in page.overlay:
-                page.overlay.append(download_picker)
+            if download_picker not in page.services:
+                page.services.append(download_picker)
                 page.update()
 
-            await download_picker.save_file(
+            set_result("Opening save dialog...")
+            page.update()
+
+            result = await download_picker.save_file(
                 dialog_title="Save anonymized files",
                 file_name="anonymized_files.zip",
                 allowed_extensions=["zip"],
             )
 
+            print(f"save_file returned: {result}", flush=True)
+
+            selected_path = result if isinstance(result, str) else getattr(result, "path", None)
+
+            if selected_path:
+                save_anonymized_zip_to_path(selected_path)
+            elif result is None:
+                set_result("Download was cancelled.")
+                page.update()
+
         except Exception as exc:
+            print(f"Could not open download dialog: {exc}", flush=True)
             set_result(f"Could not open download dialog: {exc}")
+            page.update()
 
     download_all_button.on_click = download_all_files
 
-    def on_file_selected(e: ft.FilePickerResultEvent):
-        if not e.files:
+    def on_file_selected(e: Any):
+        files = e if isinstance(e, list) else getattr(e, "files", None)
+
+        print(f"File picker result received: {e}", flush=True)
+        print(f"Selected files: {files}", flush=True)
+
+        if not files:
             selected_files_text.value = "No files selected"
             selected_files_text.update()
             set_result("File selection was cancelled.")
+            page.update()
             return
 
-        selected_file_names = [file.name for file in e.files]
+        selected_file_names = [file.name for file in files]
         selected_files_text.value = "\n".join(selected_file_names)
-        selected_files_text.update()
+        page.update()
 
         try:
-            set_result(f"Anonymizing {len(e.files)} files, please wait...")
+            set_result(f"Selected {len(files)} file(s). Starting anonymization...")
+            page.update()
+
             lang = language_state["current"]
             file_anonymizer = file_anonymizer_en if lang == "en" else file_anonymizer_fr
 
             success_count = 0
+            skipped_files: list[str] = []
             anonymized_files.clear()
 
-            for file in e.files:
-                file_path = file.path
+            for file in files:
+                file_path = getattr(file, "path", None)
+                file_name = getattr(file, "name", "Unknown file")
+
+                print(f"Selected file: name={file_name}, path={file_path}", flush=True)
+
                 if not file_path:
+                    skipped_files.append(file_name)
                     continue
 
                 result = file_anonymizer.anonymize(file_path)
 
-                # Map extension to content type
                 ext = Path(file_path).suffix.lower()
                 content_type = "application/octet-stream"
                 if ext == ".pdf":
@@ -278,57 +328,93 @@ def build_file_anonymization_card(
                     anonymized_text=result.response.anonymizedText,
                     match_table=result.response.matchTable,
                 )
+
                 success_count += 1
 
             download_all_button.disabled = success_count == 0
             download_all_button.update()
 
-            set_result(f"Successfully anonymized {success_count} files.")
+            if success_count > 0:
+                selected_files_text.value = "\n".join(
+                    str(file_data["filename"]) for file_data in anonymized_files
+                )
+                page.update()
+                set_result(f"Successfully anonymized {success_count} file(s). You can now download them.")
+
+            elif skipped_files:
+                skipped_names = "\n".join(skipped_files)
+                set_result(
+                    "The selected file picker result did not include usable local paths.\n\n"
+                    "Skipped file(s):\n"
+                    f"{skipped_names}"
+                )
+                page.update()
+
+            else:
+                set_result("No file was anonymized.")
+                page.update()
 
         except Exception as exc:
-            set_result(f"Error: {exc}")
+            print(f"File anonymization error: {exc}", flush=True)
+            set_result(f"Error while anonymizing file: {exc}")
+            page.update()
 
     file_picker = ft.FilePicker()
     file_picker.on_result = on_file_selected
 
-    if file_picker not in page.overlay:
-        page.overlay.append(file_picker)
+    if file_picker not in page.services:
+        page.services.append(file_picker)
+        page.update()
 
     async def pick_files(e):
+        set_result("Opening file picker...")
+        page.update()
+        print("Opening file picker...", flush=True)
+
         try:
-            if file_picker not in page.overlay:
-                page.overlay.append(file_picker)
+            if file_picker not in page.services:
+                page.services.append(file_picker)
                 page.update()
 
-            await file_picker.pick_files(
+            result = await file_picker.pick_files(
                 dialog_title="Select files to anonymize",
                 allow_multiple=True,
                 allowed_extensions=["pdf", "docx", "odt", "txt"],
                 file_type=ft.FilePickerFileType.CUSTOM,
             )
 
+            print(f"pick_files returned: {result}", flush=True)
+
+            if result is not None:
+                on_file_selected(result)
+            else:
+                set_result("File selection was cancelled.")
+                page.update()
+
         except Exception as exc:
+            print(f"Could not open file picker: {exc}", flush=True)
             set_result(f"Could not open file picker: {exc}")
+            page.update()
 
     upload_box = ft.Container(
         width=305,
         height=100,
-        border=ft.border.all(1, ft.colors.GREY_400),
+        border=ft.Border.all(1, ft.Colors.GREY_400),
         border_radius=6,
-        padding=ft.padding.all(12),
+        padding=ft.Padding.all(12),
         on_click=pick_files,
         ink=True,
         content=ft.Column(
             controls=[
                 ft.Icon(
-                    ft.icons.ADD_BOX_OUTLINED,
+                    ft.Icons.ADD_BOX_OUTLINED,
                     size=30,
-                    color=ft.colors.BLACK,
+                    color=ft.Colors.BLACK,
                 ),
                 ft.Text(
                     "Click to select files",
                     size=13,
-                    color=ft.colors.GREY_700,
+                    color=ft.Colors.GREY_700,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 selected_files_text,
@@ -342,13 +428,13 @@ def build_file_anonymization_card(
     return ft.Container(
         width=350,
         height=245,
-        padding=ft.padding.all(22),
-        bgcolor=ft.colors.WHITE,
+        padding=ft.Padding.all(22),
+        bgcolor=ft.Colors.WHITE,
         border_radius=8,
         shadow=ft.BoxShadow(
             spread_radius=1,
             blur_radius=14,
-            color=ft.colors.with_opacity(0.09, ft.colors.BLACK),
+            color=ft.Colors.BLACK.with_opacity(color=ft.Colors.BLACK, opacity=0.09),
             offset=ft.Offset(0, 3),
         ),
         content=ft.Column(
@@ -370,7 +456,7 @@ def build_anonymizer_page(page: ft.Page):
     result_text = ft.Text(
         "Results will appear here...",
         size=14,
-        color=ft.colors.BLACK87,
+        color=ft.Colors.BLACK_87,
         text_align=ft.TextAlign.CENTER,
         selectable=True,
     )
@@ -384,11 +470,11 @@ def build_anonymizer_page(page: ft.Page):
         page.update()
 
     language_selector = ft.Dropdown(
-        label="Select Language (BERT Model)",
+        label="Select Language",
         value="fr",
         options=[
-            ft.dropdown.Option("fr", "French (CamemBERT)"),
-            ft.dropdown.Option("en", "English (BERT Large)"),
+            ft.DropdownOption(key="fr", text="🇫🇷 French (CamemBERT)"),
+            ft.DropdownOption(key="en", text=" 🇬🇧 English (BERT Large)"),
         ],
         width=300,
     )
@@ -396,8 +482,8 @@ def build_anonymizer_page(page: ft.Page):
 
     return ft.Container(
         expand=True,
-        bgcolor=ft.colors.WHITE,
-        padding=ft.padding.only(top=20),
+        bgcolor=ft.Colors.WHITE,
+        padding=ft.Padding.only(top=20),
         content=ft.Column(
             scroll=ft.ScrollMode.AUTO,
             controls=[

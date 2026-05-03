@@ -2,7 +2,7 @@
 name = "anomyzumapp"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.12.3"
+requires-python = "==3.12.3"
 dependencies = [
     "protobuf>=7.34.1",
     "pydantic>=2.13.3",
@@ -12,7 +12,7 @@ dependencies = [
     "spacy>=3.8.13",
     "torch>=2.11.0",
     "transformers>=5.6.2",
-    "flet==0.24.1",
+    "flet==0.84.0",
     "python-docx>=1.2.0",
     "odfpy>=1.4.1",
 ]

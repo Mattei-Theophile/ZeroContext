@@ -1,2 +1,2 @@
-flet==0.24.1
+flet==0.84.0
 pyinstaller>=6.0.0

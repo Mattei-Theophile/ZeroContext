@@ -6,7 +6,6 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 import flet as ft
 
-from database.mongodb_service import MongoDiscussionService
 from mode.FileAnonymization import FileAnonymization
 from mode.PromptAnonymization import PromptAnonymization
 
@@ -56,8 +55,6 @@ def result_box(title: str, text_control: ft.Text, height: int):
 
 
 def build_text_anonymization_card(
-        discussion_uuid: str,
-        discussion_service: MongoDiscussionService,
         language_state: dict,
         set_result: callable,
 ):
@@ -85,13 +82,6 @@ def build_text_anonymization_card(
             lang = language_state["current"]
             anonymizer = anonymizer_en if lang == "en" else anonymizer_fr
             response = anonymizer.anonymize(prompt)
-
-            discussion_service.save_prompt(
-                discussion_uuid=discussion_uuid,
-                prompt=response.originalText,
-                anonymized_text=response.anonymizedText,
-                match_table=response.matchTable,
-            )
 
             set_result(response.anonymizedText)
             prompt_input.value = ""
@@ -141,8 +131,6 @@ def build_text_anonymization_card(
 
 def build_file_anonymization_card(
         page: ft.Page,
-        discussion_uuid: str,
-        discussion_service: MongoDiscussionService,
         language_state: dict,
         set_result: callable,
 ):
@@ -306,28 +294,17 @@ def build_file_anonymization_card(
                 elif ext == ".txt":
                     content_type = "text/plain"
 
-                file_id = discussion_service.save_file(
-                    discussion_uuid=discussion_uuid,
-                    filename=result.output_filename,
-                    content=result.file_bytes,
-                    content_type=content_type,
-                )
+
 
                 anonymized_files.append(
                     {
-                        "file_id": str(file_id),
                         "filename": result.output_filename,
                         "content": result.file_bytes,
                         "content_type": content_type,
                     }
                 )
 
-                discussion_service.save_prompt(
-                    discussion_uuid=discussion_uuid,
-                    prompt=result.response.originalText,
-                    anonymized_text=result.response.anonymizedText,
-                    match_table=result.response.matchTable,
-                )
+
 
                 success_count += 1
 
@@ -449,8 +426,6 @@ def build_file_anonymization_card(
     )
 
 def build_anonymizer_page(page: ft.Page):
-    discussion_uuid = str(uuid.uuid4())
-    discussion_service = MongoDiscussionService()
     language_state = {"current": "fr"}
 
     result_text = ft.Text(
@@ -494,15 +469,13 @@ def build_anonymizer_page(page: ft.Page):
                 ft.Row(
                     controls=[
                         build_text_anonymization_card(
-                            discussion_uuid=discussion_uuid,
-                            discussion_service=discussion_service,
+
                             language_state=language_state,
                             set_result=set_result,
                         ),
                         build_file_anonymization_card(
                             page=page,
-                            discussion_uuid=discussion_uuid,
-                            discussion_service=discussion_service,
+
                             language_state=language_state,
                             set_result=set_result,
                         ),
